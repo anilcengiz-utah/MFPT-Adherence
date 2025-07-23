@@ -2,7 +2,7 @@
 % Anil Cengiz
 
 % This script simulates a stochastic one-compartment linear pharmacokinetic model with first-order absorption and partial adherence. 
-% It generates first passage time (FPT) data to a given threshold. 
+% It generates first passage time (FPT) data to a given threshold for once-daily and twice-daily dosing regimens. 
 
 % Parameters that are varied: 
 
