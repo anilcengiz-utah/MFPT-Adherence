@@ -1,0 +1,153 @@
+% July 23, 2025
+% Anil Cengiz
+
+% This script simulates a stochastic one-compartment linear pharmacokinetic model with first-order absorption and partial adherence. 
+% It generates first passage time (FPT) data to a given threshold. 
+
+% Parameters that are varied: 
+
+% ka: absorption rate (1/hour)
+% ke: elimination rate (1/hour)
+% p: adherence rate (probability, unitless)
+% theta: threshold level (unitless)
+
+$ Parameters that are fixed: 
+
+% D: Dose size (mg)
+% F: Bioavailability (unitless)
+% V: Volume of distribution (L)
+% tau: Dosing interval (hours)
+
+% Note: The dosing interval and dose size are changed between a once-daily dosing regimen and a twice-daily dosing regimen. The twice-daily dosing regimen is assumed to be the default regimen. Switching to a once-daily dosing regimen multiplies the dosing interval and the dose size by 2 to keep the total doses taken over the course of a day fixed. 
+
+close all
+clc
+clear all
+
+%Parameters 
+D=1;
+F=1;
+V=1;
+ntrials=10000; 
+FPT_max=1e6; %The simulation is terminated if FPT_max is reached. Otherwise, the simulations take too long to run for low adherence rates. 
+tau=12; % (hours)
+
+% Instead of choosing a range for elimination rates, we choose a range for alpha. This is because alpha is confined to the interval (0,1).  
+% Alpha is also linked to the drug half-life by alpha=2^(-tau/t_halflife)
+
+alpha_vec=(0.05:0.05:0.95)'; %alpha=exp(-ke*tau) 
+ke_vec=-log(a_vec)/tau;
+p_vec=0.25:0.1:0.95;
+ka_vec=[0.01, 0.05, 0.1, 0.25, 0.5, 1, 2]; %Immediate release (IR): ka=0.1, Modified release (MR): ka=0.5, Extended release (ER): ka=2
+theta_vec=[0.001, 0.01, 0.05, 0.1, 0.2]; %This will get multiplied by the long-term average drug concentration to create a threshold.  
+trial_vec=1:ntrials;
+
+
+% Creates a 5-D grid of parameter combinations
+[Ke,P,Theta,Ka,Trial]=ndgrid(ke_vec,p_vec,theta_vec,ka_vec,trial_vec);
+
+% Instead of running 5 loops, flatten variables and have one parfor loop that chooses its parameters from these flattened vectors. 
+Ke=Ke(:);
+P=P(:);
+Theta=Theta(:);
+Ka=Ka(:);
+Trial=Trial(:);
+
+% Initialize FPT vectors for once-daily and twice-daily dosing 
+FPT_vec_once=zeros(size(P));
+FPT_vec_twice=zeros(size(P));
+
+
+%% Twice Daily Simulations 
+tic
+parfor i=1:numel(P)
+    % For each trial, set the PK parameters
+    ke=Ke(i);
+    p=P(i);
+    theta=Theta(i);
+    ka=Ka(i);
+
+    % Average long-term drug concentration with perfect adherence
+    Cav=D*F/V./(ke*tau);
+    
+    % Long-term drug concentration and drug amount at the absorption site with perfect adherence immediately before dosing 
+    % We use these as initial conditions with the implicit assumption that the patient starts missing doses after reaching steady state. 
+    C0=ka/(ka-ke)*2*D*F/V*(exp(-ke*2*tau)./(1-exp(-ke*2*tau))-exp(-ka*2*tau)./(1-exp(-ka*2*tau))); %Drug concentration
+    G0=2*D*F*(exp(-ka*2*tau)./(1-exp(-ka*2*tau))); %Drug amount at absorption site
+
+    % Initialize FPT 
+    FPT=0; % (hours)
+
+    % Run a while loop until either the drug concentration falls below a critical threshold or the maximum number of iterations is reached. 
+    % Critical threshold is set to be a fraction of the long-term average drug concentration, theta*Cav. 
+    while and(C0>theta*Cav,FPT<FPT_max)
+        B=rand<p; %Boolean indicating whether the dose is taken or not 
+
+        % Compute the drug amount and concentration at the end of the dosing cycle. These come from the solution to the ODE system. 
+        G0_next=(G0+B*D*F)*exp(-ka*tau);
+        C0_next=C0*exp(-ke*tau)+ka/(ka-ke)*(G0+B*D*F)/V*(exp(-ke*tau)-exp(-ka*tau));
+
+        % Update FPT, drug amount, and drug concentration.
+        FPT=FPT+tau;
+        C0=C0_next;
+        G0=G0_next;
+    end
+    FPT_vec_twice(i)=FPT; %Once the trial is over, record FPT. 
+end
+toc
+
+% Reshape FPT to turn it back into a 5-D matrix and convert to be in days instead of hours. 
+FPT_reshaped_twice=reshape(FPT_vec_twice,length(a_vec),length(p_vec),length(theta_vec),length(ka_vec),length(trial_vec))/24;
+
+% Compute the mean and standard deviation of the FPT 
+MFPT_twice=mean(FPT_reshaped_twice,5);
+SFPT_twice=std(FPT_reshaped_twice,0,5);
+
+
+%% Once-Daily Simulations
+% Once-daily simulations double the dosing interval and dose size. So, the formulas are similar to the ones above, except that all D's and tau's get a factor of 2 in front of them.  
+
+tic
+parfor i=1:numel(P)
+    % For each trial, set the PK parameters
+    ke=Ke(i);
+    p=P(i);
+    theta=Theta(i);
+    ka=Ka(i)
+
+    % Average long-term drug concentration with perfect adherence
+    Cav=D*F/V./(ke*tau);
+
+    % Long-term drug concentration and drug amount at the absorption site with perfect adherence immediately before dosing 
+    % We use these as initial conditions with the implicit assumption that the patient starts missing doses after reaching steady state. 
+    C0=ka/(ka-ke)*2*D*F/V*(exp(-ke*2*tau)./(1-exp(-ke*2*tau))-exp(-ka*2*tau)./(1-exp(-ka*2*tau)));
+    G0=2*D*F*(exp(-ka*2*tau)./(1-exp(-ka*2*tau)));
+    
+    % Initialize FPT 
+    FPT=0;
+
+    % Run a while loop until either the drug concentration falls below a critical threshold or the maximum number of iterations is reached. 
+    % Critical threshold is set to be a fraction of the long-term average drug concentration, theta*Cav. 
+    while and(C0>theta*Cav,FPT<FPT_max)
+        B=rand<p; %Boolean indicating whether the dose is taken or not 
+
+        % Compute the drug amount and concentration at the end of the dosing cycle. These come from the solution to the ODE system. 
+        G0_next=(G0+B*2*D*F)*exp(-ka*2*tau);
+        C0_next=C0*exp(-ke*2*tau)+ka/(ka-ke)*(G0+B*2*D*F)/V*(exp(-ke*2*tau)-exp(-ka*2*tau));
+
+        % Update FPT, drug concentration, and drug amount. 
+        FPT=FPT+2*tau;
+        C0=C0_next;
+        G0=G0_next;
+    end
+    FPT_vec_once(i)=FPT; %Once the trial is over, record FPT. 
+end
+toc
+
+% Reshape FPT to turn it back into a 5-D matrix and convert to be in days instead of hours. 
+FPT_reshaped_once=reshape(FPT_vec_once,length(a_vec),length(p_vec),length(theta_vec),length(ka_vec),length(trial_vec))/24;
+
+% Compute the mean and standard deviation of the FPT 
+MFPT_once=mean(FPT_reshaped_once,5);
+SFPT_once=std(FPT_reshaped_once,0,5);
+save("FPT_distributions_once_and_twice_daily.mat","FPT_reshaped_twice","FPT_reshaped_once","ke_vec","p_vec","theta_vec","ka_vec","FPT_max")
