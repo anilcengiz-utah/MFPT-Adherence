@@ -1,0 +1,163 @@
+% July 23, 2025
+% Anil Cengiz
+
+% This script creates plots for the once-daily vs twice-daily simulations using the saved simulation data. 
+
+clc
+clear all
+close all
+
+load("MFPT_once_and_twice_daily.mat") 
+tau=12;
+
+% Generate the alpha_vec using ke_vec 
+alpha_vec=exp(-ke_vec*tau);
+
+% Pick which alpha values you would like to use for graphing 
+alpha_indices=[1,10,14];
+
+% Plotting colors, markers, size, and line width 
+color_vec=["#ffeda0",...
+"#fed976",...
+"#feb24c",...
+"#fd8d3c",...
+"#fc4e2a",...
+"#e31a1c",...
+"#b10026",...
+"#800026"];
+marker_vec=["o","square","diamond","v","^","pentagram","*"];
+marker_size=10;
+rev_col=flip(color_vec);
+lw=2;
+
+% Time horizons of interest (days)
+horizon=365*[1,10,100];
+
+% Use the size of the reshaped FPT to initialize probability matrices that can store probabilities for three time horizons 
+size_FPT=size(FPT_reshaped_twice);
+prob_once=zeros(size_FPT(1),size_FPT(2),size_FPT(3),size_FPT(4),3);
+prob_twice=zeros(size_FPT(1),size_FPT(2),size_FPT(3),size_FPT(4),3);
+
+% For each parameter combination, compute the percentage of FPTs that are smaller than a given time horizon. 
+for i1=1:size_FPT(1)
+for i2=1:size_FPT(2)
+for i3=1:size_FPT(3)
+for i4=1:size_FPT(4)
+
+    %Fetch a vector of FPT data 
+    data_twice=squeeze(FPT_reshaped_twice(i1,i2,i3,i4,:));
+    data_once=squeeze(FPT_reshaped_once(i1,i2,i3,i4,:));
+    
+    %Compute the probability that the FPT is below a given time horizon
+    prob_twice(i1,i2,i3,i4,:)=[mean(data_twice<horizon(1)),mean(data_twice<horizon(2)),mean(data_twice<horizon(3))];
+    prob_once(i1,i2,i3,i4,:)=[mean(data_once<horizon(1)),mean(data_once<horizon(2)),mean(data_once<horizon(3))];
+
+end
+end
+end
+end
+
+% Index for the frequency-adjusted adherence rate 
+p_mod=6;
+
+% Index for the adherence rate (not frequency adjusted)
+p_ind=7;
+
+% Index for threshold
+theta_ind=3;
+
+% Row titles
+title_vec=["Short Half-Life (3 hours)", "Medium Half-Life (12 hours)", "Long Half-Life (23 hours)"];
+
+%% Create a 3x3 subplot where the rows are different half-lives and columns are different time horizons
+hfig=figure()
+
+%Loop over half-lives or alpha values
+for i=1:length(alpha_indices)
+    
+    subplot(3,3,3*(i-1)+1)
+    % Plot twice-daily without adjustment 
+    j=6; %Color/marker index 
+    plot(ka_vec,squeeze(prob_twice(alpha_indices(i),p_ind,theta_ind,:,1)),'Linewidth',lw,'Color',rev_col(j),"Marker",marker_vec(j),'MarkerSize',marker_size,'LineStyle','--')
+    hold on
+    % Plot twice-daily without adjustment 
+    j=7; %Color/marker index 
+    plot(ka_vec,squeeze(prob_twice(alpha_indices(i),p_mod,theta_ind,:,1)),'Linewidth',lw,'Color',rev_col(j),"Marker",marker_vec(j),'MarkerSize',marker_size,'LineStyle','-.')
+    hold on
+    % Plot once-daily 
+    j=3; %Color/marker index 
+    plot(ka_vec,squeeze(prob_once(alpha_indices(i),p_ind,theta_ind,:,1)),'Linewidth',lw,'Color',rev_col(j),'HandleVisibility','off',"Marker",marker_vec(j),'MarkerSize',marker_size)
+    grid on
+    grid minor
+    xlim([0,1])
+    ylim([0,1])
+    xlabel("Absorption Rate (1/hour)")
+    ylabel("Prob. (1 yr) ")
+
+    subplot(3,3,3*(i-1)+2)
+    % Plot twice-daily without adjustment 
+    j=6;
+    plot(ka_vec,squeeze(prob_twice(alpha_indices(i),p_ind,theta_ind,:,2)),'Linewidth',lw,'Color',rev_col(j),"Marker",marker_vec(j),'MarkerSize',marker_size,'LineStyle','--')
+    hold on
+    % Plot twice-daily without adjustment 
+    j=7;
+    plot(ka_vec,squeeze(prob_twice(alpha_indices(i),p_mod,theta_ind,:,2)),'Linewidth',lw,'Color',rev_col(j),"Marker",marker_vec(j),'MarkerSize',marker_size,'LineStyle','-.')
+    % Plot once-daily 
+    j=3;
+    plot(ka_vec,squeeze(prob_once(alpha_indices(i),p_ind,theta_ind,:,2)),'Linewidth',lw,'Color',rev_col(j),'HandleVisibility','off',"Marker",marker_vec(j),'MarkerSize',marker_size)
+    grid on
+    grid minor
+    xlabel("Absorption Rate (1/hour)")
+    xlim([0,1])
+    ylabel("Prob. (10 yr) ")
+    title(title_vec(i))
+
+    subplot(3,3,3*(i-1)+3)
+    % Plot twice-daily without adjustment 
+    j=6;
+    plot(ka_vec,squeeze(prob_twice(alpha_indices(i),p_ind,theta_ind,:,3)),'Linewidth',lw,'Color',rev_col(j),"Marker",marker_vec(j),'MarkerSize',marker_size,'LineStyle','--')
+    hold on
+    j=7;
+    plot(ka_vec,squeeze(prob_twice(alpha_indices(i),p_mod,theta_ind,:,3)),'Linewidth',lw,'Color',rev_col(j),"Marker",marker_vec(j),'MarkerSize',marker_size,'LineStyle','-.')
+    j=3;
+    plot(ka_vec,squeeze(prob_once(alpha_indices(i),p_ind,theta_ind,:,3)),'Linewidth',lw,'Color',rev_col(j),'HandleVisibility','on',"Marker",marker_vec(j),'MarkerSize',marker_size)
+    grid on
+    grid minor
+    xlim([0,1])
+    ylim([0,1])
+    xlabel("Absorption Rate (1/hour)")
+    ylabel("Prob. (100 yr) ")
+    end
+
+% I could not find a way to make the legend appear at the place I want. So, I run the code and create a plot with a bad legend, and I move it manually.
+legend("Twice-Daily, p=88\%", "Twice-Daily, p=80\%", "Once-Daily, p=88\%", "NumColumns",5,'Location','southoutside')
+
+%Create figure name, make/save a "nice" plot using the nice_graphing function at the end. 
+fname="once_or_twice_dist_updated/july_big_subplot"
+nice_graphing(fname,hfig)
+
+% Move the legend manually here and uncomment and run the following line to save the updated figure
+% exportgraphics(hfig, strcat(fname,'.png'));
+
+function nice_graphing(fname, hfig)
+picturewidth = 20; % set this parameter and keep it forever
+hw_ratio = 1; % feel free to play with this ratio
+set(findall(hfig,'-property','FontSize'),'FontSize',21) % adjust fontsize to your document
+set(findall(hfig,'-property','Box'),'Box','on') % optional
+set(findall(hfig,'-property','Interpreter'),'Interpreter','latex')
+set(findall(hfig,'-property','TickLabelInterpreter'),'TickLabelInterpreter','latex')
+set(hfig,'Units','centimeters','Position',[3 3 picturewidth hw_ratio*picturewidth])
+pos = get(hfig,'Position');
+set(hfig,'PaperPositionMode','Auto','PaperUnits','centimeters','PaperSize',[pos(3), pos(4)])
+%print(hfig,fname,'-dpdf','-painters','-fillpage')
+%print(hfig,fname,'-dpng','-painters')
+set(hfig, 'Position', get(0, 'Screensize'));
+%exportgraphics(hfig, strcat(fname,'.png'), 'ContentType', 'vector');
+exportgraphics(hfig, strcat(fname,'.png'));
+saveas(hfig,strcat(fname,'.fig'))
+end
+
+
+
+
+
