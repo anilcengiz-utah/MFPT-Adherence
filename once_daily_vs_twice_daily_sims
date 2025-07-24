@@ -61,7 +61,7 @@ FPT_vec_twice=zeros(size(P));
 %% Twice Daily Simulations 
 tic
 parfor i=1:numel(P)
-    % For each trial, set the PK parameters
+    % For each trial, set the PK parameters and threshold
     ke=Ke(i);
     p=P(i);
     theta=Theta(i);
@@ -110,7 +110,7 @@ SFPT_twice=std(FPT_reshaped_twice,0,5);
 
 tic
 parfor i=1:numel(P)
-    % For each trial, set the PK parameters
+    % For each trial, set the PK parameters and threshold
     ke=Ke(i);
     p=P(i);
     theta=Theta(i);
