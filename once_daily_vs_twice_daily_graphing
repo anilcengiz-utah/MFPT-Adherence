@@ -127,7 +127,7 @@ for i=1:length(alpha_indices)
     ylim([0,1])
     xlabel("Absorption Rate (1/hour)")
     ylabel("Prob. (100 yr) ")
-    end
+end
 
 % I could not find a way to make the legend appear at the place I want. So, I run the code and create a plot with a bad legend, and I move it manually.
 legend("Twice-Daily, p=88\%", "Twice-Daily, p=80\%", "Once-Daily, p=88\%", "NumColumns",5,'Location','southoutside')
