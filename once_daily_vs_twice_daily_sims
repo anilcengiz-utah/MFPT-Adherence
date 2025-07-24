@@ -72,6 +72,7 @@ parfor i=1:numel(P)
     
     % Long-term drug concentration and drug amount at the absorption site with perfect adherence immediately before dosing 
     % We use these as initial conditions with the implicit assumption that the patient starts missing doses after reaching steady state. 
+    % These are computed for the once-daily dosing regimen.
     C0=ka/(ka-ke)*2*D*F/V*(exp(-ke*2*tau)./(1-exp(-ke*2*tau))-exp(-ka*2*tau)./(1-exp(-ka*2*tau))); %Drug concentration
     G0=2*D*F*(exp(-ka*2*tau)./(1-exp(-ka*2*tau))); %Drug amount at absorption site
 
@@ -150,4 +151,5 @@ FPT_reshaped_once=reshape(FPT_vec_once,length(a_vec),length(p_vec),length(theta_
 % Compute the mean and standard deviation of the FPT 
 MFPT_once=mean(FPT_reshaped_once,5);
 SFPT_once=std(FPT_reshaped_once,0,5);
+save("MFPT_once_and_twice_daily.mat","MFPT_twice","MFPT_once","ke_vec","p_vec","theta_vec","ka_vec","FPT_max")
 save("FPT_distributions_once_and_twice_daily.mat","FPT_reshaped_twice","FPT_reshaped_once","ke_vec","p_vec","theta_vec","ka_vec","FPT_max")
