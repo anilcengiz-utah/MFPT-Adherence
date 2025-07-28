@@ -1,0 +1,429 @@
+% July 23, 2025
+% Anil Cengiz
+
+% This script creates plots for the once-daily vs twice-daily simulations of Lacosamide using the saved simulation data. 
+
+close all
+clc
+clear all
+
+% All the PK parameters for Lacosamide were taken from Page 96 of the following Australian patent document:  
+% https://patentimages.storage.googleapis.com/51/6d/70/62a4440becfe35/AU2011335415B2.pdf
+
+% Lacosamide parameters for twice-daily immediate release (IR) formulation
+D=200; % Dose size (mg);
+F=1; %Bioavailability (unitless)
+V=50; %Volume of distribution (L);
+tau=12; %Dosing interval (hours)
+ka=2; %Rate of absorption (1/hour)
+ke=0.05; %Rate of elimination (1/hour)
+alpha=exp(-ke*tau);
+p=0.88; %Adherence rate for once-daily regimens
+p_adj=0.8; %Adherence rate for twice-daily regimens
+theta_vec=[0.001, 0.01, 0.05, 0.1, 0.2]; %Range of critical threshold levels 
+ntrials=100000;
+trial_vec=1:ntrials;
+FPT_max=1e6;  %The simulation is terminated if FPT_max is reached. Otherwise, the simulations take too long to run for low adherence rates. 
+
+% Creates a 2-D grid of parameter combinations
+[Theta,Trial]=ndgrid(theta_vec,trial_vec);
+
+% Instead of running 2 loops, flatten variables and have one parfor loop that chooses its parameters from these flattened vectors. 
+Theta=Theta(:);
+Trial=Trial(:);
+
+% Initialize FPT vectors for once-daily and twice-daily dosing 
+FPT_vec_once=zeros(size(Theta)); %immediate release 
+FPT_vec_once_ka05=zeros(size(Theta));  %modified release 
+FPT_vec_once_ka01=zeros(size(Theta));  %extended release 
+FPT_vec_twice=zeros(size(Theta));  %immediate release 
+FPT_vec_twice_mod=zeros(size(Theta)); %immediate release, frequency-adjusted adherence rate 
+
+% Twice Daily Simulations 
+tic
+parfor i=1:numel(Theta)
+  % For each trial, set the threshold
+  theta=Theta(i);
+  % Average long-term drug concentration with perfect adherence
+  Cav=D*F/V./(ke*tau);
+
+  % Long-term drug concentration and drug amount at the absorption site with perfect adherence immediately before dosing 
+  % We use these as initial conditions with the implicit assumption that the patient starts missing doses after reaching steady state. 
+  % These are computed for the once-daily dosing regimen.
+  C0=ka/(ka-ke)*2*D*F/V*(exp(-ke*2*tau)./(1-exp(-ke*2*tau))-exp(-ka*2*tau)./(1-exp(-ka*2*tau)));
+  G0=2*D*F*(exp(-ka*2*tau)./(1-exp(-ka*2*tau)));
+
+  % Initialize FPT 
+  FPT=0; % (hours)    
+
+  % Run a while loop until either the drug concentration falls below a critical threshold or the maximum number of iterations is reached. 
+  % Critical threshold is set to be a fraction of the long-term average drug concentration, theta*Cav. 
+  while and(C0>theta*Cav,FPT<FPT_max)
+        B=rand<p; %Boolean indicating whether the dose is taken or not 
+
+        % Compute the drug amount and concentration at the end of the dosing cycle. These come from the solution to the ODE system. 
+        G0_next=(G0+B*D*F)*exp(-ka*tau);
+        C0_next=C0*exp(-ke*tau)+ka/(ka-ke)*(G0+B*D*F)/V*(exp(-ke*tau)-exp(-ka*tau));
+
+        % Update FPT, drug amount, and drug concentration.
+        FPT=FPT+tau;
+        C0=C0_next;
+        G0=G0_next;
+    end
+    FPT_vec_twice(i)=FPT; %Once the trial is over, record FPT. 
+end
+toc
+
+% Twice Daily Simulations with Adjusted Adherence Based on Frequency
+% p=0.80 instead of p=0.88
+tic
+parfor i=1:numel(Theta)
+  % For each trial, set the PK parameters and threshold
+  theta=Theta(i);
+
+  % Average long-term drug concentration with perfect adherence
+  Cav=D*F/V./(ke*tau);
+
+  % Long-term drug concentration and drug amount at the absorption site with perfect adherence immediately before dosing 
+  % We use these as initial conditions with the implicit assumption that the patient starts missing doses after reaching steady state. 
+  % These are computed for the once-daily dosing regimen.
+  C0=ka/(ka-ke)*2*D*F/V*(exp(-ke*2*tau)./(1-exp(-ke*2*tau))-exp(-ka*2*tau)./(1-exp(-ka*2*tau)));
+  G0=2*D*F*(exp(-ka*2*tau)./(1-exp(-ka*2*tau)));
+
+  % Initialize FPT 
+  FPT=0; % (hours)
+
+  % Run a while loop until either the drug concentration falls below a critical threshold or the maximum number of iterations is reached. 
+  % Critical threshold is set to be a fraction of the long-term average drug concentration, theta*Cav. 
+  while and(C0>theta*Cav,FPT<FPT_max)
+        B=rand<p_adj; %Boolean indicating whether the dose is taken or not 
+        
+        % Compute the drug amount and concentration at the end of the dosing cycle. These come from the solution to the ODE system. 
+        G0_next=(G0+B*D*F)*exp(-ka*tau);
+        C0_next=C0*exp(-ke*tau)+ka/(ka-ke)*(G0+B*D*F)/V*(exp(-ke*tau)-exp(-ka*tau));
+
+        % Update FPT, drug amount, and drug concentration.
+        FPT=FPT+tau;
+        C0=C0_next;
+        G0=G0_next;
+  end
+  FPT_vec_twice_mod(i)=FPT;  %Once the trial is over, record FPT. 
+end
+toc
+
+%Once Daily Simulations (Immediate Release)
+tic
+parfor i=1:numel(Theta)
+theta=Theta(i);
+    Cav=D*F/V./(ke*tau);
+    
+    C0=ka/(ka-ke)*2*D*F/V*(exp(-ke*2*tau)./(1-exp(-ke*2*tau))-exp(-ka*2*tau)./(1-exp(-ka*2*tau)));
+    G0=2*D*F*(exp(-ka*2*tau)./(1-exp(-ka*2*tau)));
+
+    FPT=0;
+    while and(C0>theta*Cav,FPT<FPT_max)
+        B=rand<;
+        G0_next=(G0+B*2*D*F)*exp(-ka*2*tau);
+        C0_next=C0*exp(-ke*2*tau)+ka/(ka-ke)*(G0+B*2*D*F)/V*(exp(-ke*2*tau)-exp(-ka*2*tau));
+        
+        FPT=FPT+2*tau;
+
+        C0=C0_next;
+        G0=G0_next;
+    end
+    FPT_vec_once(i)=FPT;
+end
+toc
+
+
+
+%Once Daily Simulations %ka=0.5;
+tic
+ka=0.5;
+parfor i=1:numel(Theta)
+theta=Theta(i);
+    Cav=D*F/V./(ke*tau);
+    
+    C0=ka/(ka-ke)*2*D*F/V*(exp(-ke*2*tau)./(1-exp(-ke*2*tau))-exp(-ka*2*tau)./(1-exp(-ka*2*tau)));
+    G0=2*D*F*(exp(-ka*2*tau)./(1-exp(-ka*2*tau)));
+
+    FPT=0;
+    while and(C0>theta*Cav,FPT<FPT_max)
+        B=rand<;
+        G0_next=(G0+B*2*D*F)*exp(-ka*2*tau);
+        C0_next=C0*exp(-ke*2*tau)+ka/(ka-ke)*(G0+B*2*D*F)/V*(exp(-ke*2*tau)-exp(-ka*2*tau));
+        
+        FPT=FPT+2*tau;
+
+        C0=C0_next;
+        G0=G0_next;
+    end
+    FPT_vec_once_ka05(i)=FPT;
+end
+toc
+
+%Once Daily Simulations %ka=0.1;
+tic
+ka=0.1;
+parfor i=1:numel(Theta)
+theta=Theta(i);
+    Cav=D*F/V./(ke*tau);
+    
+    C0=ka/(ka-ke)*2*D*F/V*(exp(-ke*2*tau)./(1-exp(-ke*2*tau))-exp(-ka*2*tau)./(1-exp(-ka*2*tau)));
+    G0=2*D*F*(exp(-ka*2*tau)./(1-exp(-ka*2*tau)));
+
+    FPT=0;
+    while and(C0>theta*Cav,FPT<FPT_max)
+        B=rand<;
+        G0_next=(G0+B*2*D*F)*exp(-ka*2*tau);
+        C0_next=C0*exp(-ke*2*tau)+ka/(ka-ke)*(G0+B*2*D*F)/V*(exp(-ke*2*tau)-exp(-ka*2*tau));
+        
+        FPT=FPT+2*tau;
+
+        C0=C0_next;
+        G0=G0_next;
+    end
+    FPT_vec_once_ka01(i)=FPT;
+end
+toc
+
+%%
+FPT_reshaped_once=reshape(FPT_vec_once,length(theta_vec),length(trial_vec))/24;
+FPT_reshaped_once_ka01=reshape(FPT_vec_once_ka01,length(theta_vec),length(trial_vec))/24;
+FPT_reshaped_once_ka05=reshape(FPT_vec_once_ka05,length(theta_vec),length(trial_vec))/24;
+FPT_reshaped_twice_mod=reshape(FPT_vec_twice_mod,length(theta_vec),length(trial_vec))/24;
+FPT_reshaped_twice=reshape(FPT_vec_twice,length(theta_vec),length(trial_vec))/24;
+
+
+threshold=365*[1,10,100];
+size_FPT=size(FPT_reshaped_twice);
+
+prob_twice=zeros(size_FPT(1),3);
+prob_once=zeros(size_FPT(1),3);
+prob_once_ka01=zeros(size_FPT(1),3);
+prob_once_ka05=zeros(size_FPT(1),3);
+prob_twice_mod=zeros(size_FPT(1),3);
+
+for i=1:length(theta_vec)
+ cdf_twice=sort(squeeze(FPT_reshaped_twice(i,:)));
+ cdf_once=sort(squeeze(FPT_reshaped_once(i,:)));
+ cdf_once_ka01=sort(squeeze(FPT_reshaped_once_ka01(i,:)));
+ cdf_once_ka05=sort(squeeze(FPT_reshaped_once_ka05(i,:)));
+ cdf_twice_mod=sort(squeeze(FPT_reshaped_twice_mod(i,:)));
+
+
+
+prob_twice(i,:)=[mean(cdf_twice<threshold(1)),mean(cdf_twice<threshold(2)),mean(cdf_twice<threshold(3))];
+prob_once(i,:)=[mean(cdf_once<threshold(1)),mean(cdf_once<threshold(2)),mean(cdf_once<threshold(3))];
+prob_once_ka01(i,:)=[mean(cdf_once_ka01<threshold(1)),mean(cdf_once_ka01<threshold(2)),mean(cdf_once_ka01<threshold(3))];
+prob_once_ka05(i,:)=[mean(cdf_once_ka05<threshold(1)),mean(cdf_once_ka05<threshold(2)),mean(cdf_once_ka05<threshold(3))];
+prob_twice_mod(i,:)=[mean(cdf_twice_mod<threshold(1)),mean(cdf_twice_mod<threshold(2)),mean(cdf_twice_mod<threshold(3))];
+
+end  
+    
+
+
+%color_vec=["#e41a1c","#377eb8","#4daf4a","#984ea3","#ff7f00","#f781bf","#a65628"];
+color_vec=["#ffeda0",...
+"#fed976",...
+"#feb24c",...
+"#fd8d3c",...
+"#fc4e2a",...
+"#e31a1c",...
+"#b10026",...
+"#800026"];
+marker_vec=["o","square","diamond","v","^","pentagram","*"];
+marker_size=10;
+rev_col=flip(color_vec);
+
+
+
+
+%%
+% NEW GRAPH July 14
+hfig=figure()
+%tiledlayout(3,3, 'TileSpacing', 'compact')
+
+  subplot(3,3,1)
+    lw=2;
+    j=6;
+    plot(100*theta_vec,squeeze(prob_twice(:,1)),'Linewidth',lw,'Color',rev_col(j),"Marker",marker_vec(j),'MarkerSize',marker_size,'LineStyle','--')
+    hold on
+    j=7;
+    plot(100*theta_vec,squeeze(prob_twice_mod(:,1)),'Linewidth',lw,'Color',rev_col(j),"Marker",marker_vec(j),'MarkerSize',marker_size,'LineStyle','-.')
+
+    j=3;
+    plot(100*theta_vec,squeeze(prob_once(:,1)),'Linewidth',lw,'Color',rev_col(j),'HandleVisibility','off',"Marker",marker_vec(j),'MarkerSize',marker_size)
+
+    
+    grid on
+    grid minor
+    xlabel("Threshold (\%)")
+    ylabel("Prob. (1 yr) ")
+
+
+
+    subplot(3,3,2)
+    j=6;
+    plot(100*theta_vec,squeeze(prob_twice(:,2)),'Linewidth',lw,'Color',rev_col(j),"Marker",marker_vec(j),'MarkerSize',marker_size,'LineStyle','--')
+    hold on
+    j=7;
+    plot(100*theta_vec,squeeze(prob_twice_mod(:,2)),'Linewidth',lw,'Color',rev_col(j),"Marker",marker_vec(j),'MarkerSize',marker_size,'LineStyle','-.')
+
+    j=3;
+    plot(100*theta_vec,squeeze(prob_once(:,2)),'Linewidth',lw,'Color',rev_col(j),'HandleVisibility','off',"Marker",marker_vec(j),'MarkerSize',marker_size)
+
+    grid on
+    grid minor
+    xlabel("Threshold (\%)")
+    ylabel("Prob. (10 yr) ")
+    %sgtitle("Lacosamide IR vs IR, Dashed=Twice a Day, Dash-Dotted=Twice a Day (Lower Adh), Solid=Once a Day")
+    t=title("Lacosamide IR vs IR")
+
+
+    subplot(3,3,3)
+    j=6;
+    plot(100*theta_vec,squeeze(prob_twice(:,3)),'Linewidth',lw,'Color',rev_col(j),"Marker",marker_vec(j),'MarkerSize',marker_size,'LineStyle','--')
+    hold on
+    j=7;
+    plot(100*theta_vec,squeeze(prob_twice_mod(:,3)),'Linewidth',lw,'Color',rev_col(j),"Marker",marker_vec(j),'MarkerSize',marker_size,'LineStyle','-.')
+
+    j=3;
+    plot(100*theta_vec,squeeze(prob_once(:,3)),'Linewidth',lw,'Color',rev_col(j),'HandleVisibility','off',"Marker",marker_vec(j),'MarkerSize',marker_size)
+
+
+    grid on
+    grid minor
+    xlabel("Threshold (\%)")
+    ylabel("Prob. (100 yr) ")
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+subplot(3,3,4)
+
+   lw=2;
+    j=6;
+    plot(100*theta_vec,squeeze(prob_twice(:,1)),'Linewidth',lw,'Color',rev_col(j),"Marker",marker_vec(j),'MarkerSize',marker_size,'LineStyle','--')
+    hold on
+    j=7;
+    plot(100*theta_vec,squeeze(prob_twice_mod(:,1)),'Linewidth',lw,'Color',rev_col(j),"Marker",marker_vec(j),'MarkerSize',marker_size,'LineStyle','-.')
+
+    j=3;
+    plot(100*theta_vec,squeeze(prob_once_ka05(:,1)),'Linewidth',lw,'Color',rev_col(j),'HandleVisibility','off',"Marker",marker_vec(j),'MarkerSize',marker_size)
+
+    
+    grid on
+    grid minor
+    xlabel("Threshold (\%)")
+    ylabel("Prob. (1 yr) ")
+    %sgtitle("Lacosamide IR vs MR, Dashed=Twice a Day, Dash-Dotted=Twice a Day (Lower Adh), Solid=Once a Day, ka=0.5")
+
+
+    subplot(3,3,5)
+    j=6;
+    plot(100*theta_vec,squeeze(prob_twice(:,2)),'Linewidth',lw,'Color',rev_col(j),"Marker",marker_vec(j),'MarkerSize',marker_size,'LineStyle','--')
+    hold on
+    j=7;
+    plot(100*theta_vec,squeeze(prob_twice_mod(:,2)),'Linewidth',lw,'Color',rev_col(j),"Marker",marker_vec(j),'MarkerSize',marker_size,'LineStyle','-.')
+
+    j=3;
+    plot(100*theta_vec,squeeze(prob_once_ka05(:,2)),'Linewidth',lw,'Color',rev_col(j),'HandleVisibility','off',"Marker",marker_vec(j),'MarkerSize',marker_size)
+
+    grid on
+    grid minor
+    xlabel("Threshold (\%)")
+    ylabel("Prob. (10 yr) ")
+    title("Lacosamide IR vs MR")
+
+
+
+    subplot(3,3,6)
+    j=6;
+    plot(100*theta_vec,squeeze(prob_twice(:,3)),'Linewidth',lw,'Color',rev_col(j),"Marker",marker_vec(j),'MarkerSize',marker_size,'LineStyle','--')
+    hold on
+    j=7;
+    plot(100*theta_vec,squeeze(prob_twice_mod(:,3)),'Linewidth',lw,'Color',rev_col(j),"Marker",marker_vec(j),'MarkerSize',marker_size,'LineStyle','-.')
+
+    j=3;
+    plot(100*theta_vec,squeeze(prob_once_ka05(:,3)),'Linewidth',lw,'Color',rev_col(j),'HandleVisibility','off',"Marker",marker_vec(j),'MarkerSize',marker_size)
+
+
+    grid on
+    grid minor
+    xlabel("Threshold (\%)")
+    ylabel("Prob. (100 yr) ")
+
+
+
+    subplot(3,3,7)
+    lw=2;
+    j=6;
+    plot(100*theta_vec,squeeze(prob_twice(:,1)),'Linewidth',lw,'Color',rev_col(j),"Marker",marker_vec(j),'MarkerSize',marker_size,'LineStyle','--')
+    hold on
+    j=7;
+    plot(100*theta_vec,squeeze(prob_twice_mod(:,1)),'Linewidth',lw,'Color',rev_col(j),"Marker",marker_vec(j),'MarkerSize',marker_size,'LineStyle','-.')
+
+    j=3;
+    plot(100*theta_vec,squeeze(prob_once_ka01(:,1)),'Linewidth',lw,'Color',rev_col(j),'HandleVisibility','off',"Marker",marker_vec(j),'MarkerSize',marker_size)
+
+    
+    grid on
+    grid minor
+    xlabel("Threshold (\%)")
+    ylabel("Prob. (1 yr) ")
+
+
+
+    subplot(3,3,8)
+    j=6;
+    plot(100*theta_vec,squeeze(prob_twice(:,2)),'Linewidth',lw,'Color',rev_col(j),"Marker",marker_vec(j),'MarkerSize',marker_size,'LineStyle','--')
+    hold on
+    j=7;
+    plot(100*theta_vec,squeeze(prob_twice_mod(:,2)),'Linewidth',lw,'Color',rev_col(j),"Marker",marker_vec(j),'MarkerSize',marker_size,'LineStyle','-.')
+
+    j=3;
+    plot(100*theta_vec,squeeze(prob_once_ka01(:,2)),'Linewidth',lw,'Color',rev_col(j),'HandleVisibility','off',"Marker",marker_vec(j),'MarkerSize',marker_size)
+
+    grid on
+    grid minor
+    xlabel("Threshold (\%)")
+    ylabel("Prob. (10 yr) ")
+    title("Lacosamide IR vs XR")
+
+
+    subplot(3,3,9)
+    j=6;
+    plot(100*theta_vec,squeeze(prob_twice(:,3)),'Linewidth',lw,'Color',rev_col(j),"Marker",marker_vec(j),'MarkerSize',marker_size,'LineStyle','--')
+    hold on
+    j=7;
+    plot(100*theta_vec,squeeze(prob_twice_mod(:,3)),'Linewidth',lw,'Color',rev_col(j),"Marker",marker_vec(j),'MarkerSize',marker_size,'LineStyle','-.')
+
+    j=3;
+    plot(100*theta_vec,squeeze(prob_once_ka01(:,3)),'Linewidth',lw,'Color',rev_col(j),'HandleVisibility','on',"Marker",marker_vec(j),'MarkerSize',marker_size)
+
+
+    grid on
+    grid minor
+    xlabel("Threshold (\%)")
+    ylabel("Prob. (100 yr) ")
+
+    legend("Twice-Daily, p=88\%", "Twice-Daily, p=80\%", "Once-Daily, p=88\%", "NumColumns",5,'Location','southoutside')
+
+
+        nice_graphing("lacosamide/big_subplots",hfig)
